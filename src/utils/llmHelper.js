@@ -11,13 +11,11 @@ const groq = new Groq({
   dangerouslyAllowBrowser: true // Required for browser-based calls (not recommended for production!)
 });
 
-const KNOWN_CATEGORIES = ["Billing Issue", "Technical Problem", "Feature Request", "General Inquiry", "Unknown"];
-
 /**
  * Categorize a customer support message using Groq AI
- *
+ * 
  * @param {string} message - The customer support message
- * @returns {Promise<{category: string, requiresAction: boolean, reasoning: string}>}
+ * @returns {Promise<{category: string, reasoning: string}>}
  */
 export async function categorizeMessage(message) {
   try {
@@ -26,43 +24,31 @@ export async function categorizeMessage(message) {
       messages: [
         {
           role: "user",
-          content: `Categorize this customer support message and determine whether it requires action from a support agent (as opposed to being purely informational, positive feedback, or something that can be safely ignored).
-
-Message: ${message}
-
-Respond in exactly this format:
-CATEGORY: <Billing Issue, Technical Problem, Feature Request, General Inquiry, or Unknown>
-REQUIRES_ACTION: <yes or no>
-REASONING: <your reasoning>`
+          content: `Categorize this customer support message: ${message}`
         }
       ],
       temperature: 0.7,
     });
 
     const content = response.choices[0].message.content;
-
-    const categoryMatch = content.match(/CATEGORY:\s*(.+)/i);
-    const actionMatch = content.match(/REQUIRES_ACTION:\s*(\w+)/i);
-    const reasoningMatch = content.match(/REASONING:\s*([\s\S]*)/i);
-
-    let category = categoryMatch ? categoryMatch[1].trim() : null;
-    if (!category || !KNOWN_CATEGORIES.includes(category)) {
-      // Model didn't follow the format - fall back to keyword detection
-      const lower = content.toLowerCase();
-      if (lower.includes('billing')) category = "Billing Issue";
-      else if (lower.includes('technical') || lower.includes('bug')) category = "Technical Problem";
-      else if (lower.includes('feature')) category = "Feature Request";
-      else if (lower.includes('inquiry') || lower.includes('question')) category = "General Inquiry";
-      else category = "Unknown";
+    
+    const lines = content.split('\n');
+    let category = "Unknown";
+    let reasoning = content;
+    
+    if (content.toLowerCase().includes('billing')) {
+      category = "Billing Issue";
+    } else if (content.toLowerCase().includes('technical') || content.toLowerCase().includes('bug')) {
+      category = "Technical Problem";
+    } else if (content.toLowerCase().includes('feature')) {
+      category = "Feature Request";
+    } else if (content.toLowerCase().includes('inquiry') || content.toLowerCase().includes('question')) {
+      category = "General Inquiry";
     }
-
-    const requiresAction = actionMatch ? actionMatch[1].toLowerCase() === 'yes' : true;
-    const reasoning = reasoningMatch ? reasoningMatch[1].trim() : content;
-
+    
     return {
       category,
-      requiresAction,
-      reasoning
+      reasoning: content
     };
   } catch (error) {
     console.warn('Groq API failed, using mock response:', error.message);
@@ -116,13 +102,12 @@ function getMockCategorization(message) {
   };
   
   // Billing-related detection
-  if (lowerMessage.includes('bill') || lowerMessage.includes('payment') ||
+  if (lowerMessage.includes('bill') || lowerMessage.includes('payment') || 
       lowerMessage.includes('charge') || lowerMessage.includes('invoice') ||
       lowerMessage.includes('credit card') || lowerMessage.includes('subscription') ||
       lowerMessage.includes('refund') || lowerMessage.includes('cancel') && lowerMessage.includes('account')) {
     return {
       category: "Billing Issue",
-      requiresAction: true,
       reasoning: getRandomReasoning('billing')
     };
   }
@@ -136,7 +121,6 @@ function getMockCategorization(message) {
       lowerMessage.includes('problem') && !lowerMessage.includes('no problem')) {
     return {
       category: "Technical Problem",
-      requiresAction: true,
       reasoning: getRandomReasoning('technical')
     };
   }
@@ -149,37 +133,33 @@ function getMockCategorization(message) {
       lowerMessage.includes('enhancement') || lowerMessage.includes('would be great')) {
     return {
       category: "Feature Request",
-      requiresAction: true,
       reasoning: getRandomReasoning('feature')
     };
   }
-
+  
   // Positive feedback detection
   if ((lowerMessage.includes('thank') || lowerMessage.includes('thanks') || lowerMessage.includes('appreciate')) &&
       !lowerMessage.includes('but') && !lowerMessage.includes('however')) {
     return {
       category: "General Inquiry",
-      requiresAction: false,
       reasoning: getRandomReasoning('positive')
     };
   }
-
+  
   // Question/inquiry detection
-  if (lowerMessage.includes('how') || lowerMessage.includes('what') ||
+  if (lowerMessage.includes('how') || lowerMessage.includes('what') || 
       lowerMessage.includes('when') || lowerMessage.includes('where') ||
       lowerMessage.includes('can i') || lowerMessage.includes('is there') ||
       lowerMessage.includes('?')) {
     return {
       category: "General Inquiry",
-      requiresAction: true,
       reasoning: getRandomReasoning('inquiry')
     };
   }
-
+  
   // Fallback for ambiguous messages
   return {
     category: "General Inquiry",
-    requiresAction: true,
     reasoning: getRandomReasoning('ambiguous')
   };
 }
